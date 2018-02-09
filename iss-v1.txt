@@ -1,0 +1,129 @@
+// Skedsmo Kodeklubb ISS v.1 28-01.2018. Marek Rzewuski (marek@webdesign.no)
+
+function doExport(i, lat, lon, xsize, ysize, resolution, doexport) {
+  var fnavn = 'img_' + i + '_' + lat.toFixed(0) + '_' + lon.toFixed(0);
+  var geometry = ee.Geometry.Rectangle(
+          [lon-xsize/2, lat-ysize/4, lon+xsize/2, lat+ysize/4]
+  );
+  var visParams = {bands: ['B4', 'B3', 'B2'], max: 0.3};
+  var bandNames = ee.List(['B2', 'B3', 'B4', 'B5', 'B6', 'B7', 'B10', 'B11']);
+  var l8 = ee.ImageCollection('LANDSAT/LC8_L1T_TOA');
+
+  // Get the median over time, in each band, in each pixel.
+  var collection = l8
+    .filterDate('2016-01-01', '2018-12-31')
+    .select(bandNames)
+    .filterBounds(geometry)
+    .map(function(image) {
+      return ee.Algorithms.Landsat.simpleCloudScore(image);
+    });
+
+  // Convert the collection to an array.
+  var array = collection.toArray();
+
+  // Label of the axes.
+  var imageAxis = 0;
+  var bandAxis = 1;
+
+  // Get the cloud slice and the bands of interest.
+  var bands = array.arraySlice(bandAxis, 0, bandNames.length());
+  var clouds = array.arraySlice(bandAxis, bandNames.length());
+
+  // Sort by cloudiness.
+  var sorted = bands.arraySort(clouds);
+
+  // Get the least cloudy images, 20% of the total.
+  var numImages = sorted.arrayLength(imageAxis).multiply(0.2).int();
+  var leastCloudy = sorted.arraySlice(imageAxis, 0, numImages);
+
+  // Get the mean of the least cloudy images by reducing along the image axis.
+  var mean = leastCloudy.arrayReduce({
+    reducer: ee.Reducer.mean(),
+    axes: [imageAxis]
+  });
+
+  // Turn the reduced array image into a multi-band image for display.
+  var meanImage = mean.arrayProject([bandAxis]).arrayFlatten([bandNames]);
+
+  // Load or import the Hansen et al. forest change dataset.
+  var hansenImage = ee.Image('UMD/hansen/global_forest_change_2015');
+
+  // Select the land/water mask.
+  var datamask = hansenImage.select('datamask');
+
+  // Create a binary mask.
+  var mask = datamask.eq(1);
+
+  // Update the composite mask with the water mask.
+  var maskedComposite = meanImage.updateMask(mask);
+
+  // Make a water image out of the mask.
+  var water = mask.not();
+
+  // Mask water with itself to mask all the zeros (non-water).
+  water = water.mask(water);
+
+  // Make an image collection of visualization images.
+  var mosaic = ee.ImageCollection([
+    meanImage.visualize(visParams),
+    water.visualize({palette: '000044'}),
+  ]).mosaic();
+
+  if (i % 2 === 0) {
+    Map.addLayer(geometry, {color: 'ffffff'},fnavn);
+  } else {
+    Map.addLayer(geometry, {color: '000000'},fnavn);
+  }
+
+  if (doexport === true) {
+    Export.image.toDrive({
+      image: mosaic,
+      description: fnavn,
+   //   dimensions: resolution,
+      scale: resolution,
+      region: geometry
+    });
+  }
+}
+
+var punkterArr = [];
+var bilderEkvator = 9; // 9 18 36 virker OK
+var omkrets = 40000;
+var imgBredde = omkrets / bilderEkvator;
+var latSteg = 180 / bilderEkvator;
+var i = 0;
+var ysize = 360/bilderEkvator;
+
+
+var omkrets = 40000;
+for (var lat = 90; lat >= -90; lat = lat - latSteg) {
+  var omkretsLat = omkrets*Math.cos((Math.abs(lat))*(Math.PI/180));
+  var noPics = omkretsLat/imgBredde;
+  var lonSteg = (360 / noPics)/2;
+  var xsize = (360/noPics)/2;
+  print('***'+lat+' '+omkretsLat.toFixed(2)+' '+noPics.toFixed(2));
+
+  if (noPics >= 3) { // bruk 12 hvis bilderEkvator = 36
+    for (var lon = -180.0; lon < 180.0; lon = lon + lonSteg) {
+      var meta = 
+        i + ', ' + 
+          lat.toFixed(4) + ', ' + 
+          lon.toFixed(4) + ', ' +
+          xsize.toFixed(4) + ', ' +
+          ysize.toFixed(4) + ';';
+      punkterArr.push(ee.Feature(ee.Geometry.Point(lon, lat), {meta: meta}));
+      doExport(i, lat, lon, xsize*1.1,ysize*1.3, "320", true);
+      print(meta);
+      i++;
+    }
+  }
+}
+
+var features = ee.FeatureCollection(punkterArr);
+
+// Export the FeatureCollection to a KML file.
+Export.table.toDrive({
+  collection: features,
+  description:'punkter-'+Date.now(),
+  fileFormat: 'KML'
+});

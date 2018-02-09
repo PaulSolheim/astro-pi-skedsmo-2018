@@ -1,0 +1,15 @@
+sqlite3 database.db
+DROP TABLE IF EXISTS cities;
+CREATE TABLE cities ( city VARCHAR(120), city_ascii VARCHAR(120), lat FLOAT NOT NULL, lng FLOAT NOT NULL, pop FLOAT NOT NULL, country VARCHAR(45) NOT NULL, iso2 VARCHAR(2), iso3 VARCHAR(3), admin VARCHAR(53) );
+DROP TABLE IF EXISTS mountains;
+CREATE TABLE mountains ( name VARCHAR(120), lng FLOAT NOT NULL, lat FLOAT NOT NULL );
+DROP TABLE IF EXISTS training;
+CREATE TABLE training ( id VARCHAR(4), center_lat FLOAT NOT NULL, center_long FLOAT NOT NULL, nr_of_longs FLOAT NOT NULL, nr_of_lats FLOAT NOT NULL, longitude FLOAT NOT NULL, latitude FLOAT NOT NULL );
+.mode csv
+.import cities.csv cities
+.import mountains.csv mountains
+.import training.csv training
+select count(*) from cities;
+select count(*) from mountains;
+select count(*) from training;
+.exit

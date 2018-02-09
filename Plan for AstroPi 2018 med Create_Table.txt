@@ -1,0 +1,159 @@
+Astro Pi 2018
+
+finne xy utfra posisjon for iss og target
+plotte riktig xy paa ann_images
+resize marek sine bilder til 1024 bredde (sjekk total str)
+kode som finne riktig marek-bilde utfra lat-long
+(lengde og bredde i filnavnet er senter i bildet)
+
+legge inn ORB-matching av features
+legge til mountains for australia, europa, sor-amerika, afrika
+
+
+Spørsmål:
+	Hvilken versjon av opencv kan vi innstallere på AstroPi? 3.3
+	Hvor finner vi dataene som vi trenger? Marek og Paal
+	Hvor kan vi finne bilder som vi kan teste koden på? Enviropi github
+	hvordan blir bildene tatt med IR kameraet med blå filter? vi faar se.
+	
+Installering av biblioteker:
+sudo apt-get update
+
+sudo pip3 install ephem
+sudo pip3 install numpy
+sudo apt-get install sqlite3
+sudo apt-get install libatlas-base-dev
+sudo pip3 install opencv-python -i https://www.piwheels.hostedpi.com/simple
+
+(opencv_contrib er ikke med her, maa laste ned, kompilere og installere manuellt,
+se guide fra pyimagesearch.com. Evt. kan vi bruke ORB som er inkl. i standard opencv)
+Her er det jeg gjorde paa en Raspberry med Stretch:
+
+sudo apt-get update && sudo apt-get upgrade
+sudo apt-get install build-essential cmake pkg-config
+sudo apt-get install libjpeg-dev libtiff5-dev libjasper-dev libpng12-dev
+sudo apt-get install libavcodec-dev libavformat-dev libswscale-dev libv4l-dev
+sudo apt-get install libxvidcore-dev libx264-dev
+sudo apt-get install libgtk2.0-dev libgtk-3-dev
+sudo apt-get install libcanberra-gtk*
+sudo apt-get install libatlas-base-dev gfortran
+sudo apt-get install python2.7-dev python3-dev
+
+cd ~
+wget -O opencv.zip https://github.com/Itseez/opencv/archive/3.4.0.zip
+unzip opencv.zip
+wget -O opencv_contrib.zip https://github.com/Itseez/opencv_contrib/archive/3.4.0.zip
+unzip opencv_contrib.zip
+
+cd ~/opencv-3.4.0/
+mkdir build
+cd build
+cmake -D CMAKE_BUILD_TYPE=RELEASE \
+    -D CMAKE_INSTALL_PREFIX=/usr/local \
+    -D OPENCV_EXTRA_MODULES_PATH=~/opencv_contrib-3.4.0/modules \
+    -D ENABLE_NEON=ON \
+    -D ENABLE_VFPV3=ON \
+    -D BUILD_TESTS=OFF \
+    -D INSTALL_PYTHON_EXAMPLES=OFF \
+    -D BUILD_EXAMPLES=OFF ..
+
+sudo nano /etc/dphys-swapfile
+endre til:
+# CONF_SWAPSIZE=100
+CONF_SWAPSIZE=1024
+
+ctrl-O og ctrl-X for aa lagre og avslutte nano
+
+restart the swap service:
+
+sudo /etc/init.d/dphys-swapfile stop
+sudo /etc/init.d/dphys-swapfile start
+
+start kompileringen:
+
+make -j4
+
+Installer:
+sudo make install
+sudo ldconfig
+
+Reset CONF_SWAPSIZE  to 100MB:
+
+sudo nano /etc/dphys-swapfile
+endre til:
+CONF_SWAPSIZE=100
+
+restart the swap service:
+
+sudo /etc/init.d/dphys-swapfile stop
+sudo /etc/init.d/dphys-swapfile start
+
+sudo reboot
+
+
+Tensorflow:
+sudo apt-get install libblas-dev liblapack-dev python-dev \
+ libatlas-base-dev gfortran python-setuptools
+cd Downloads
+sudo wget http://ci.tensorflow.org/view/Nightly/job/nightly-pi-python3/lastSuccessfulBuild/artifact/output-artifacts/tensorflow-1.5.0rc1-cp34-none-any.whl
+
+hvis du har Raspberry Stretch (siste versjon av raspberry OS):
+mv tensorflow-1.5.0rc1-cp34-none-any.whl tensorflow-1.5.0rc1-cp35-none-any.whl
+sudo ​pip3 install tensorflow-1.5.0rc1-cp35-none-any.whl
+ellers:
+sudo ​pip3 install tensorflow-1.5.0rc1-cp34-none-any.whl
+
+
+Hva jeg har gjort for aa laste inn i databasen:
+terminal:
+cd astropi/2018/skedsmo
+sqlite3 database.db
+DROP TABLE IF EXISTS cities;
+CREATE TABLE cities ( city VARCHAR(120), city_ascii VARCHAR(120), lat FLOAT NOT NULL, lng FLOAT NOT NULL, pop FLOAT NOT NULL, country VARCHAR(45) NOT NULL, iso2 VARCHAR(2), iso3 VARCHAR(3), admin VARCHAR(53) );
+DROP TABLE IF EXISTS mountains;
+CREATE TABLE mountains ( name VARCHAR(120), lng FLOAT NOT NULL, lat FLOAT NOT NULL );
+.mode csv
+.import cities.csv cities
+.import mountains.csv mountains
+select count(*) from cities;
+select count(*) from mountains;
+.exit
+
+Koding:
+OK - Ta et bilde med kameraet og lagre det i logg katalogen
+OK - Finn cirka posisjon for ISS basert på TLE data fra NASA.
+OK - Finn tidspunkt for posisjonen
+OK - Bestemme om vi er i dagslys eller natt
+Hvis vi er i dagslys:
+	Bestemme hvilke landmasser vi skal lete etter basert på cirka posisjonen
+	lete etter landmasser i bildet som vi har tatt
+	annotere bildet med byer og fjell
+	lagre logg som viser det vi har funnet
+Hvis det er natt:
+	Bestemme hvilke byer som vi skal lete etter
+	lete etter byer
+	annotere bildet med byer
+	lagre logg som viser det vi har funnet
+Lagre et bilde som viser hva vi har funnet i loggen
+Vise tekst på skjermen utfra hva vi har funnet
+Vise en animasjon på skjermen
+OK - Ta en pause hvis det er nødvendig så vi får samme tid mellom hvert bilde
+OK - Starte på nytt fra toppen
+
+Hva trenger vi?
+OK -	ephem biblioteket for å finne cirka posisjon
+OK -	TLE data fra NASA
+	opencv+contrib biblioteket for å manipulere bilder
+OK -	liste over byer med lengdegrad og breddegrad
+OK -	liste over landmasser eller bilder av dem med metadata
+
+------------------------------
+Råd fra PyImageSearch angående 
+Keypoint detectors and feature descriptors:
+
+There are many, many alternatives to SIFT and SURF. 
+ORB is one. BRIEF, BRISK, FREAK, KAZE, and AKAZE are others. 
+Choosing between them is very much application specific 
+and I recommend trying the options, examining the accuracy, 
+and then making the educated choice from there. 
+I hope that helps!
